@@ -7,13 +7,107 @@ try {
     let MPRPlugin;
 }
 
-// OrientationRequested=[A || P || L || R || I || S] Slice#=[0...N]
+/******************************************************************************** 
+Parsing Utilities
+********************************************************************************/
+
+// look ahead for the pattern =[xxx]
+function lookAhead(input,stateInformation) {
+    let totalLength = input.length;
+    let state = stateInformation.state.currentState;
+    let idx = stateInformation.currentIndex;
+    var result = undefined;
+    while (state === stateInformation.state.currentState && idx < totalLength){
+        let c = input.charAt(idx);
+        if (stateInformation.state.transitions[stateInformation.state.currentState].lookFor.has(c)){
+            stateInformation.state.currentState = stateInformation.state.nextState;
+            if (stateInformation.state.currentState != stateInformation.finalState){
+                stateInformation.state.nextState++;
+                stateInformation.currentIndex = idx;
+                stateInformation.capturedInformation = c;
+            }
+            else{
+                stateInformation.done = true;
+            }
+            result = stateInformation;
+
+        } else {
+             idx++; 
+        }
+    }
+    return result;
+}
+
+// look through the imageId, looking for the term
+// "RequestedOrientation=[x], where x is one of A,P,I,S,L,R
+// which is the requested orientation of the slice.
+function parseOrientation(input) {
+     const oc = "RequestedOrientation";
+
+    let totalLength = input.length;
+    var inputLC = input.toLowerCase();
+    let idx = inputLC.indexOf(oc.toLowerCase());
+
+    if (idx < 0){
+        console.log("did not find corrent parameter in request.")
+        console.assert(false);
+        return undefined;
+    }
+
+    // Parsing states. look for =,then bracket, then desired character, then bracket to finish.
+    var states = {
+          currentState: 0,
+          nextState: 1,
+          transitions: [
+              {
+                  lookFor: new Set(['='])
+              },
+              {
+                  lookFor: new Set(['['])
+              },
+              {
+                  lookFor: new Set(['a','p','i','s','l','r'])
+              },
+              {
+                  lookFor: new Set([']'])
+              }
+          ]
+      }
+
+    stateInformation = {
+        currentIndex: idx += oc.length,
+        state: states,
+        capturedInformation: undefined,
+        finalState: 4,
+        done: false
+    }
+
+    while (stateInformation != undefined && stateInformation.done === false){
+        stateInformation = lookAhead(inputLC,stateInformation);
+    }
+
+    if (stateInformation != undefined){
+        console.log(stateInformation.capturedInformation);
+    }
+
+}
+
+// The imageId must contain the following 2 terms:
+// OrientationRequested=[A || P || L || R || I || S] 
+// Slice#=[0...NNNNNN]
+// Slice number is limited range of 0-99999.
 function parseImageId(imageId) {
+
+   debugger;
+   parseOrientation(test);
     return obj = {
     requestedOrientation: "A",
     sliceNumber: 0
     };
 }
+
+
+/*********************************************************************************/
 
 function createImageObject(imageNumber) {
    switch(OHIFPlugin.MPRPlugin.orientation){
@@ -57,6 +151,8 @@ function loadImage(imageId) {
         promise
     };
 }
+
+
 //TODO separate file? How to do?
 /*************************************************************************************************************************/
 
@@ -231,6 +327,7 @@ MPRPlugin = class MPRPlugin extends OHIFPlugin {
 
     setup() {
       console.log('setup MPR');
+      this.initializeImage(Session.get('activeViewport'));
     }
 
     getDisplaySet(viewportIndex) {
@@ -243,13 +340,15 @@ MPRPlugin = class MPRPlugin extends OHIFPlugin {
         });
     }
 
-    renderViewport(viewportIndex = 0) {
+    initializeImage(viewportIndex = 0) {
         try {
             let self = this;
+            debugger;
             // reset the div that will hold this plugin
             // - remove old ones
             // - add a new one with our id
-
+            var input = "RequestedOrientation=[A],Slice#=[10]";
+            parseOrientation(input);
 
             // Obtain the imaging data that has been provided to the viewport
             const displaySet = this.getDisplaySet(viewportIndex);
@@ -305,7 +404,6 @@ MPRPlugin = class MPRPlugin extends OHIFPlugin {
                 values: pixelArray,
             });
             this.imageData.getPointData().setScalars(scalarArray);
-            this.mapper.setInputData(this.imageData);
             this.dataMap = metaDataMap;
             ///////////////////////////////////////////////////////
 
